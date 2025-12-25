@@ -1,0 +1,15 @@
+name = "sermon-translator"
+main = "worker/index.ts"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[durable_objects]
+bindings = [{ name = "ROOM", class_name = "RoomDO" }]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RoomDO"]
+
+[vars]
+# Environment variables (secrets set via wrangler secret)
+

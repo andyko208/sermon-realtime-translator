@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-worker/
+.wrangler/
+.cursor/
+.playwright-mcp/
+.wrangler/
+
+.env
+.dev.vars
+*.log
+

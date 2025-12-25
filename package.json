@@ -1,0 +1,24 @@
+{
+  "name": "sermon-realtime-translator",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"npm run dev:worker\" \"npm run dev:frontend\"",
+    "dev:frontend": "vite",
+    "dev:worker": "wrangler dev worker/index.ts --port 8787",
+    "build": "npm run build:frontend && npm run build:worker",
+    "build:frontend": "vite build",
+    "build:worker": "wrangler deploy --dry-run --outdir=dist-worker",
+    "setup": "node -e \"const fs=require('fs');const env=fs.readFileSync('.env','utf8');const key=env.match(/GEMINI_API_KEY=(.+)/)?.[1];if(key)fs.writeFileSync('.dev.vars','GEMINI_API_KEY='+key.trim()+'\\n');console.log(key?'✓ Copied GEMINI_API_KEY to .dev.vars':'✗ GEMINI_API_KEY not found in .env');\""
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.6",
+    "wrangler": "^4.54.0"
+  }
+}
