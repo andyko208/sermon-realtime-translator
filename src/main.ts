@@ -6,6 +6,7 @@ import { AudienceUI } from "./ui/audience";
 import { API_BASE } from "./config";
 
 const path = location.pathname;
+const speakerKeyStorageKey = "sermon_translator_speakerKey_v1";
 
 // Home page
 if (path === "/" || path === "") {
@@ -21,7 +22,13 @@ if (path === "/" || path === "") {
 const speakerMatch = path.match(/^\/speaker\/([^/]+)$/);
 if (speakerMatch) {
   const roomId = speakerMatch[1];
-  const speakerKey = new URLSearchParams(location.search).get("speakerKey");
+  const params = new URLSearchParams(location.search);
+  const speakerKeyParam = params.get("speakerKey");
+  if (speakerKeyParam) {
+    sessionStorage.setItem(`${speakerKeyStorageKey}:${roomId}`, speakerKeyParam);
+    history.replaceState(null, "", location.pathname);
+  }
+  const speakerKey = speakerKeyParam || sessionStorage.getItem(`${speakerKeyStorageKey}:${roomId}`);
   if (!speakerKey) {
     alert("Missing speakerKey");
   } else {
@@ -35,7 +42,8 @@ if (speakerMatch) {
         statusEl: document.getElementById("speakerStatus")!,
         inputText: document.getElementById("inputText")!,
         outputText: document.getElementById("outputText")!,
-        audienceLink: document.getElementById("audienceLink")!,
+        audienceLink: document.getElementById("audienceLink") as HTMLButtonElement,
+        audioToggle: document.getElementById("speakerAudioToggle") as HTMLInputElement,
       },
       roomId,
       speakerKey
@@ -54,6 +62,8 @@ if (audienceMatch) {
       inputText: document.getElementById("audInputText")!,
       outputText: document.getElementById("audOutputText")!,
       audioToggle: document.getElementById("audioToggle") as HTMLInputElement,
+      inputLabel: document.getElementById("audInputLabel")!,
+      outputLabel: document.getElementById("audOutputLabel")!,
     },
     roomId
   );
@@ -62,4 +72,3 @@ if (audienceMatch) {
 function showPage(id: string): void {
   document.getElementById(id)!.style.display = "block";
 }
-

@@ -1,6 +1,14 @@
 /**
  * Room Durable Object: manages WebSocket fan-out for speaker -> audience
  */
+interface Env {
+  /**
+   * Optional comma-separated allowlist for WebSocket Origin checks.
+   * Use "*" to allow all (default).
+   */
+  ALLOWED_ORIGINS?: string;
+}
+
 interface RoomState {
   speakerKey: string | null;
   seq: number;
@@ -11,9 +19,18 @@ export class RoomDO {
   private roomState: RoomState = { speakerKey: null, seq: 0 };
   private speakerSocket: WebSocket | null = null;
   private audienceSockets: Set<WebSocket> = new Set();
+  private lastLangInfo: string | null = null;
+  private allowedOrigins: string[];
+  private static readonly MAX_MESSAGE_BYTES = 512 * 1024;
 
-  constructor(state: DurableObjectState) {
+  constructor(state: DurableObjectState, env: Env) {
     this.state = state;
+    this.allowedOrigins = (env.ALLOWED_ORIGINS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!this.allowedOrigins.length) this.allowedOrigins = ["*"];
+
     this.state.blockConcurrencyWhile(async () => {
       const stored = await this.state.storage.get<RoomState>("roomState");
       if (stored) this.roomState = stored;
@@ -42,6 +59,11 @@ export class RoomDO {
     // WebSocket upgrade
     const upgradeHeader = request.headers.get("Upgrade");
     if (upgradeHeader?.toLowerCase() === "websocket") {
+      const origin = request.headers.get("Origin") ?? "";
+      if (!this.isOriginAllowed(origin)) {
+        return new Response("Forbidden", { status: 403 });
+      }
+
       const role = url.searchParams.get("role");
       const key = url.searchParams.get("key");
 
@@ -49,17 +71,28 @@ export class RoomDO {
       const [client, server] = [pair[0], pair[1]];
 
       if (role === "speaker") {
+        if (!this.roomState.speakerKey) {
+          return new Response("Room not found", { status: 404 });
+        }
         if (key !== this.roomState.speakerKey) {
           return new Response("Forbidden", { status: 403 });
         }
+        this.speakerSocket?.close(1000, "Replaced by new speaker connection");
         this.speakerSocket = server;
         server.accept();
         server.addEventListener("message", (event: MessageEvent) => this.handleSpeakerMessage(event));
         server.addEventListener("close", () => { this.speakerSocket = null; });
       } else {
         // Audience
+        if (!this.roomState.speakerKey) {
+          return new Response("Room not found", { status: 404 });
+        }
         this.audienceSockets.add(server);
         server.accept();
+        if (this.lastLangInfo) server.send(this.lastLangInfo);
+        server.addEventListener("message", () => {
+          try { server.close(1008, "Audience is read-only"); } catch { /* ignore */ }
+        });
         server.addEventListener("close", () => { this.audienceSockets.delete(server); });
       }
 
@@ -69,12 +102,34 @@ export class RoomDO {
     return new Response("Expected WebSocket", { status: 400 });
   }
 
+  private isOriginAllowed(origin: string): boolean {
+    if (this.allowedOrigins.includes("*")) return true;
+    return this.allowedOrigins.includes(origin);
+  }
+
   /** Broadcast message from speaker to all audience */
   private handleSpeakerMessage(event: MessageEvent) {
     const data = event.data;
+    const size =
+      typeof data === "string"
+        ? new TextEncoder().encode(data).byteLength
+        : data instanceof ArrayBuffer
+          ? data.byteLength
+          : 0;
+    if (size > RoomDO.MAX_MESSAGE_BYTES) {
+      try { this.speakerSocket?.close(1009, "Message too large"); } catch { /* ignore */ }
+      return;
+    }
+    if (typeof data === "string") {
+      try {
+        const parsed = JSON.parse(data) as { t?: string };
+        if (parsed.t === "lang_info") this.lastLangInfo = data;
+      } catch {
+        // ignore non-json payloads
+      }
+    }
     for (const socket of this.audienceSockets) {
       try { socket.send(data); } catch { /* socket closed */ }
     }
   }
 }
-
