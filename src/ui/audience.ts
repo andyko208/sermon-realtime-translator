@@ -4,6 +4,7 @@
 import { AudioPlayer } from "../audio/player";
 import { RoomClient } from "../room/client";
 import { RoomEvent } from "../room/protocol";
+import { bindTranscriptFontSizeControls } from "./fontSizeControls";
 import { TranscriptAccumulator } from "./transcript";
 
 interface AudienceElements {
@@ -11,6 +12,8 @@ interface AudienceElements {
   inputText: HTMLElement;
   outputText: HTMLElement;
   audioToggle: HTMLInputElement;
+  inputLabel: HTMLElement;
+  outputLabel: HTMLElement;
 }
 
 export class AudienceUI {
@@ -24,6 +27,7 @@ export class AudienceUI {
     this.roomClient = new RoomClient(roomId, "audience");
     this.inputTranscript = new TranscriptAccumulator(els.inputText);
     this.outputTranscript = new TranscriptAccumulator(els.outputText);
+    bindTranscriptFontSizeControls(els.inputText.closest(".card") as HTMLElement | null);
     this.bindEvents();
     this.connect();
   }
@@ -65,6 +69,10 @@ export class AudienceUI {
         break;
       case "status":
         this.setStatus(event.msg, event.level);
+        break;
+      case "lang_info":
+        this.els.inputLabel.textContent = `Original (${event.sourceLang})`;
+        this.els.outputLabel.textContent = `Translation (${event.targetLang})`;
         break;
     }
   }

@@ -6,6 +6,7 @@ import { AudioPlayer } from "../audio/player";
 import { LiveSession } from "../live/session";
 import { RoomClient } from "../room/client";
 import { LANGUAGES, API_BASE } from "../config";
+import { bindTranscriptFontSizeControls } from "./fontSizeControls";
 import { TranscriptAccumulator } from "./transcript";
 
 interface SpeakerElements {
@@ -16,7 +17,8 @@ interface SpeakerElements {
   statusEl: HTMLElement;
   inputText: HTMLElement;
   outputText: HTMLElement;
-  audienceLink: HTMLElement;
+  audienceLink: HTMLButtonElement;
+  audioToggle: HTMLInputElement;
 }
 
 export class SpeakerUI {
@@ -28,12 +30,16 @@ export class SpeakerUI {
   private speakerKey: string;
   private inputTranscript: TranscriptAccumulator;
   private outputTranscript: TranscriptAccumulator;
+  private idleAutoStopTimer: number | null = null;
+  private lastSpeechAtMs = 0;
+  private static readonly AUTO_STOP_AFTER_SILENCE_MS = 5 * 60 * 1000; // 5 minutes
 
   constructor(private els: SpeakerElements, roomId: string, speakerKey: string) {
     this.roomId = roomId;
     this.speakerKey = speakerKey;
     this.inputTranscript = new TranscriptAccumulator(els.inputText);
     this.outputTranscript = new TranscriptAccumulator(els.outputText);
+    bindTranscriptFontSizeControls(els.inputText.closest(".card") as HTMLElement | null);
     this.populateLanguages();
     this.bindEvents();
     this.showAudienceLink();
@@ -44,8 +50,8 @@ export class SpeakerUI {
       this.els.sourceLang.add(new Option(lang.name, lang.code));
       this.els.targetLang.add(new Option(lang.name, lang.code));
     }
-    this.els.sourceLang.value = "en";
-    this.els.targetLang.value = "ko";
+    this.els.sourceLang.value = "ko";
+    this.els.targetLang.value = "en";
   }
 
   private bindEvents(): void {
@@ -55,12 +61,58 @@ export class SpeakerUI {
 
   private showAudienceLink(): void {
     const url = `${location.origin}/room/${this.roomId}`;
-    this.els.audienceLink.innerHTML = `Audience link: <a href="${url}" target="_blank">${url}</a>`;
+    this.els.audienceLink.textContent = "Audience Join Here";
+    this.els.audienceLink.onclick = () => {
+      window.open(url, "_blank", "noopener,noreferrer");
+    };
+    this.els.audienceLink.style.display = "block";
   }
 
   private setStatus(msg: string, level: "info" | "warn" | "error" = "info"): void {
     this.els.statusEl.textContent = msg;
     this.els.statusEl.className = `status ${level}`;
+  }
+
+  private clearIdleAutoStopTimer(): void {
+    if (this.idleAutoStopTimer == null) return;
+    window.clearTimeout(this.idleAutoStopTimer);
+    this.idleAutoStopTimer = null;
+  }
+
+  private markSpeechActivity(): void {
+    this.lastSpeechAtMs = Date.now();
+    this.armIdleAutoStopTimer();
+  }
+
+  private armIdleAutoStopTimer(): void {
+    this.clearIdleAutoStopTimer();
+    if (this.liveSession?.getState() !== "streaming") return;
+
+    const elapsedMs = Date.now() - this.lastSpeechAtMs;
+    const remainingMs = SpeakerUI.AUTO_STOP_AFTER_SILENCE_MS - elapsedMs;
+
+    if (remainingMs <= 0) {
+      this.handleIdleAutoStop();
+      return;
+    }
+
+    this.idleAutoStopTimer = window.setTimeout(() => this.handleIdleAutoStop(), remainingMs);
+  }
+
+  private handleIdleAutoStop(): void {
+    if (this.liveSession?.getState() !== "streaming") return;
+    const msg = "Auto-stopped after 5 minutes of silence";
+    this.stop({ statusMsg: msg, statusLevel: "warn", broadcastStatus: true });
+  }
+
+  private cleanupStreamingResources(): void {
+    this.clearIdleAutoStopTimer();
+    this.recorder.stop();
+    this.player.stop();
+    this.liveSession?.disconnect();
+    this.roomClient?.disconnect();
+    this.liveSession = null;
+    this.roomClient = null;
   }
 
   private async start(): Promise<void> {
@@ -89,6 +141,12 @@ export class SpeakerUI {
           if (state === "streaming") {
             this.setStatus("Streaming");
             this.els.stopBtn.disabled = false;
+            this.lastSpeechAtMs = Date.now();
+            this.armIdleAutoStopTimer();
+            // Broadcast language info to audience
+            const sourceName = this.els.sourceLang.selectedOptions[0]?.text || this.els.sourceLang.value;
+            const targetName = this.els.targetLang.selectedOptions[0]?.text || this.els.targetLang.value;
+            this.roomClient?.send({ t: "lang_info", sourceLang: sourceName, targetLang: targetName });
           } else if (state === "error") {
             this.setStatus("Error occurred", "error");
           }
@@ -96,13 +154,17 @@ export class SpeakerUI {
         onInputTranscript: (text, finished) => {
           this.inputTranscript.update(text, finished);
           this.roomClient?.send({ t: "in_text", text, finished });
+          if (text.trim()) this.markSpeechActivity();
         },
         onOutputTranscript: (text, finished) => {
           this.outputTranscript.update(text, finished);
           this.roomClient?.send({ t: "out_text", text, finished });
+          if (text.trim()) this.markSpeechActivity();
         },
         onOutputAudio: (b64) => {
-          this.player.enqueue(b64);
+          if (this.els.audioToggle.checked) {
+            this.player.enqueue(b64);
+          }
           this.roomClient?.send({ t: "out_audio", b64, sr: 24000 });
         },
         onInterrupt: () => {
@@ -123,19 +185,23 @@ export class SpeakerUI {
       this.recorder.onChunk = (pcm16) => this.liveSession?.sendAudio(pcm16);
       await this.recorder.start();
     } catch (err) {
+      this.cleanupStreamingResources();
       this.setStatus((err as Error).message, "error");
       this.els.startBtn.disabled = false;
     }
   }
 
-  private stop(): void {
+  private stop(opts?: {
+    statusMsg?: string;
+    statusLevel?: "info" | "warn" | "error";
+    broadcastStatus?: boolean;
+  }): void {
     this.els.stopBtn.disabled = true;
-    this.recorder.stop();
-    this.player.stop();
-    this.liveSession?.disconnect();
-    this.roomClient?.disconnect();
-    this.setStatus("Stopped");
+    if (opts?.broadcastStatus && opts.statusMsg) {
+      this.roomClient?.send({ t: "status", level: opts.statusLevel ?? "info", msg: opts.statusMsg });
+    }
+    this.cleanupStreamingResources();
+    this.setStatus(opts?.statusMsg ?? "Stopped", opts?.statusLevel ?? "info");
     this.els.startBtn.disabled = false;
   }
 }
-

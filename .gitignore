@@ -3,10 +3,16 @@ dist/
 dist-worker/
 .wrangler/
 .cursor/
+.claude/
+.agent/
+.github/
 .playwright-mcp/
 .wrangler/
+.DS_Store
 
 .env
 .dev.vars
+AGENTS.md
+CLAUDE.md
 *.log
 

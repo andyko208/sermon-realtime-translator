@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer" />
   <title>Sermon Translator</title>
   <style>
     :root {
@@ -40,15 +41,47 @@
       padding: 1.5rem;
       margin-bottom: 1rem;
     }
-    .controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+    .controls { display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
+    .audio-toggle { margin-bottom: 1rem; }
+    .font-size-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
     select, button {
       font-size: 0.9rem;
-      padding: 0.6rem 1rem;
+      padding: 0.75rem 1.25rem;
       border-radius: 8px;
       border: 1px solid var(--border);
       background: var(--bg);
       color: var(--text);
       cursor: pointer;
+    }
+    select {
+      min-width: 160px;
+      padding: 0.75rem 1.75rem 0.75rem 1.5rem;
+      -webkit-appearance: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 1rem center;
+      padding-right: 2.5rem;
+    }
+    .font-size-controls button {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      font-size: 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .font-size-controls .font-size-meta {
+      font-size: 0.85rem;
+      color: #8b949e;
+      min-width: 90px;
+      text-align: center;
     }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     button.primary {
@@ -58,7 +91,20 @@
       font-weight: 500;
     }
     button.danger { background: var(--error); color: #fff; border: none; }
-    .status { padding: 0.5rem 0; font-size: 0.85rem; }
+    .audience-link-btn {
+      margin-top: 0.75rem;
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .audience-link-btn:hover {
+      background: var(--accent);
+      color: #000;
+    }
+    .status { padding: 0.5rem 0; font-size: 0.85rem; margin-top: 0.5rem; }
     .status.info { color: var(--accent); }
     .status.warn { color: var(--warn); }
     .status.error { color: var(--error); }
@@ -82,7 +128,7 @@
       background: var(--bg);
       padding-bottom: 0.5rem;
     }
-    .transcript-text { font-size: 1rem; line-height: 1.8; }
+    .transcript-text { font-size: var(--transcript-font-size, 1rem); line-height: 1.8; }
     .transcript-text .history { color: #8b949e; }
     .transcript-text .current { color: var(--text); font-weight: 500; }
     .link { color: var(--accent); text-decoration: none; }
@@ -119,6 +165,10 @@
     <div id="speaker" style="display:none;">
       <h1>Speaker Dashboard</h1>
       <div class="card">
+        <label class="audio-toggle" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem;">
+          <input type="checkbox" id="speakerAudioToggle" />
+          Enable Audio
+        </label>
         <div class="controls">
           <select id="sourceLang" title="Source language"></select>
           <span>→</span>
@@ -127,9 +177,14 @@
           <button class="danger" id="stopBtn" disabled>Stop</button>
         </div>
         <div id="speakerStatus" class="status info">Ready</div>
-        <div id="audienceLink" class="status"></div>
+        <button id="audienceLink" class="audience-link-btn" style="display: none;"></button>
       </div>
       <div class="card">
+        <div class="font-size-controls" data-font-size-controls>
+          <button type="button" data-font-size="down" title="Decrease text size">−</button>
+          <span class="font-size-meta">Text size: <span data-font-size-value>100%</span></span>
+          <button type="button" data-font-size="up" title="Increase text size">+</button>
+        </div>
         <div class="transcript-panel">
           <h3>Original (You)</h3>
           <div id="inputText" class="transcript-text"></div>
@@ -154,12 +209,17 @@
         <div id="audienceStatus" class="status info">Connecting...</div>
       </div>
       <div class="card">
+        <div class="font-size-controls" data-font-size-controls>
+          <button type="button" data-font-size="down" title="Decrease text size">−</button>
+          <span class="font-size-meta">Text size: <span data-font-size-value>100%</span></span>
+          <button type="button" data-font-size="up" title="Increase text size">+</button>
+        </div>
         <div class="transcript-panel">
-          <h3>Original</h3>
+          <h3 id="audInputLabel">Original</h3>
           <div id="audInputText" class="transcript-text"></div>
         </div>
         <div class="transcript-panel">
-          <h3>Translation</h3>
+          <h3 id="audOutputLabel">Translation</h3>
           <div id="audOutputText" class="transcript-text"></div>
         </div>
       </div>
@@ -169,4 +229,3 @@
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
-
