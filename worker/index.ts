@@ -171,6 +171,24 @@ export default {
       });
     }
 
+    // GET /api/rooms/:roomId/status - check room existence and expiry
+    const statusMatch = path.match(/^\/api\/rooms\/([^/]+)\/status$/);
+    if (statusMatch && request.method === "GET") {
+      const roomId = statusMatch[1];
+      if (!ROOM_ID_RE.test(roomId)) {
+        return new Response(JSON.stringify({ exists: false, expiresAt: null }), {
+          headers: { ...corsHeaders, ...baseSecurityHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const id = env.ROOM.idFromName(roomId);
+      const room = env.ROOM.get(id);
+      const res = await room.fetch(new Request("http://internal/status", { method: "GET" }));
+      const data = await res.json();
+      return new Response(JSON.stringify(data), {
+        headers: { ...corsHeaders, ...baseSecurityHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // WebSocket /api/rooms/:roomId/ws
     const wsMatch = path.match(/^\/api\/rooms\/([^/]+)\/ws$/);
     if (wsMatch) {

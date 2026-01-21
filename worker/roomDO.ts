@@ -1,6 +1,9 @@
 /**
  * Room Durable Object: manages WebSocket fan-out for speaker -> audience
  */
+const ROOM_TTL_MS = 2 * 60 * 60 * 1000; // 48 hours
+// const ROOM_TTL_MS = 3 * 60 * 1000; // 1 minute
+
 interface Env {
   /**
    * Optional comma-separated allowlist for WebSocket Origin checks.
@@ -46,6 +49,7 @@ export class RoomDO {
       this.roomState.speakerKey = speakerKey;
       this.roomState.seq = 0;
       await this.state.storage.put("roomState", this.roomState);
+      await this.state.storage.setAlarm(Date.now() + ROOM_TTL_MS);
       return new Response("ok");
     }
 
@@ -54,6 +58,15 @@ export class RoomDO {
       const { speakerKey } = await request.json() as { speakerKey: string };
       const valid = this.roomState.speakerKey === speakerKey;
       return new Response(JSON.stringify({ valid }));
+    }
+
+    // Internal status check for room existence and expiry
+    if (url.pathname === "/status" && request.method === "GET") {
+      const alarm = await this.state.storage.getAlarm();
+      return new Response(JSON.stringify({
+        exists: this.roomState.speakerKey !== null,
+        expiresAt: alarm ?? null,
+      }));
     }
 
     // WebSocket upgrade
@@ -105,6 +118,15 @@ export class RoomDO {
   private isOriginAllowed(origin: string): boolean {
     if (this.allowedOrigins.includes("*")) return true;
     return this.allowedOrigins.includes(origin);
+  }
+
+  /** Self-destruct handler: closes all sockets and deletes storage */
+  async alarm() {
+    this.speakerSocket?.close(1000, "Room expired");
+    for (const socket of this.audienceSockets) {
+      try { socket.close(1000, "Room expired"); } catch { /* ignore */ }
+    }
+    await this.state.storage.deleteAll();
   }
 
   /** Broadcast message from speaker to all audience */

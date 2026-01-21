@@ -1,6 +1,6 @@
 {
   "name": "sermon-realtime-translator",
-  "version": "1.0.0",
+  "version": "26.1.17",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k \"npm run dev:worker\" \"npm run dev:frontend\"",

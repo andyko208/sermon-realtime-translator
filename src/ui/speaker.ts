@@ -19,6 +19,7 @@ interface SpeakerElements {
   outputText: HTMLElement;
   audienceLink: HTMLButtonElement;
   audioToggle: HTMLInputElement;
+  expiryEl: HTMLElement;
 }
 
 export class SpeakerUI {
@@ -31,18 +32,22 @@ export class SpeakerUI {
   private inputTranscript: TranscriptAccumulator;
   private outputTranscript: TranscriptAccumulator;
   private idleAutoStopTimer: number | null = null;
+  private expiryTimer: number | null = null;
+  private expiresAt: number | null;
   private lastSpeechAtMs = 0;
   private static readonly AUTO_STOP_AFTER_SILENCE_MS = 5 * 60 * 1000; // 5 minutes
 
-  constructor(private els: SpeakerElements, roomId: string, speakerKey: string) {
+  constructor(private els: SpeakerElements, roomId: string, speakerKey: string, expiresAt: number | null = null) {
     this.roomId = roomId;
     this.speakerKey = speakerKey;
+    this.expiresAt = expiresAt;
     this.inputTranscript = new TranscriptAccumulator(els.inputText);
     this.outputTranscript = new TranscriptAccumulator(els.outputText);
     bindTranscriptFontSizeControls(els.inputText.closest(".card") as HTMLElement | null);
     this.populateLanguages();
     this.bindEvents();
     this.showAudienceLink();
+    this.startExpiryCountdown();
   }
 
   private populateLanguages(): void {
@@ -66,6 +71,36 @@ export class SpeakerUI {
       window.open(url, "_blank", "noopener,noreferrer");
     };
     this.els.audienceLink.style.display = "block";
+  }
+
+  /** Start countdown timer showing room expiry */
+  private startExpiryCountdown(): void {
+    if (!this.expiresAt) {
+      this.els.expiryEl.style.display = "none";
+      return;
+    }
+    this.updateExpiryDisplay();
+    this.expiryTimer = window.setInterval(() => this.updateExpiryDisplay(), 60_000);
+  }
+
+  private updateExpiryDisplay(): void {
+    if (!this.expiresAt) return;
+    const remainingMs = this.expiresAt - Date.now();
+
+    if (remainingMs <= 0) {
+      // Room expired, redirect
+      if (this.expiryTimer) window.clearInterval(this.expiryTimer);
+      location.href = "/?expired=1";
+      return;
+    }
+
+    const hours = Math.floor(remainingMs / (60 * 60 * 1000));
+    const minutes = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
+    const isWarning = remainingMs < 60 * 60 * 1000; // < 1 hour
+
+    this.els.expiryEl.textContent = `Room expires in ${hours}h ${minutes}m`;
+    this.els.expiryEl.className = `room-expiry ${isWarning ? "warning" : ""}`;
+    this.els.expiryEl.style.display = "block";
   }
 
   private setStatus(msg: string, level: "info" | "warn" | "error" = "info"): void {
