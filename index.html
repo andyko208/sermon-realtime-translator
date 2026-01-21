@@ -148,16 +148,54 @@
       font-size: 1.1rem;
       padding: 0.8rem 2rem;
     }
+    #home .version {
+      font-size: 0.75rem;
+      color: #8b949e;
+      margin-top: 2rem;
+      opacity: 0.7;
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      top: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--warn);
+      color: var(--warn);
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      z-index: 1000;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* Room expiry countdown */
+    .room-expiry {
+      font-size: 0.8rem;
+      color: #8b949e;
+      padding: 0.25rem 0;
+    }
+    .room-expiry.warning { color: var(--warn); }
   </style>
 </head>
 <body>
   <div class="container">
+    <!-- Toast notification for expired room redirect -->
+    <div id="expiredToast" class="toast" style="display:none;">Room has expired. Please create a new room.</div>
+
     <!-- Home -->
     <div id="home" style="display:none;">
       <div class="hero">
         <h1>Sermon Real-Time Translator</h1>
         <p>Stream your sermon with live translation to any language</p>
         <button class="primary create-btn" id="createRoom">Create Room</button>
+        <div class="version" id="version">v<span id="versionNumber"></span></div>
       </div>
     </div>
 
@@ -177,6 +215,7 @@
           <button class="danger" id="stopBtn" disabled>Stop</button>
         </div>
         <div id="speakerStatus" class="status info">Ready</div>
+        <div id="roomExpiry" class="room-expiry" style="display:none;"></div>
         <button id="audienceLink" class="audience-link-btn" style="display: none;"></button>
       </div>
       <div class="card">
